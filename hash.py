@@ -1,35 +1,37 @@
-def pad(data: bytes) -> bytes:
-    padding_len = 8 - (len(data) % 8)
-    return data + bytes([padding_len] * padding_len)
+def xor_bytes(a: bytes, b: bytes) -> bytes:
+    return bytes(x ^ y for x, y in zip(a, b))
+
+
+def des_encrypt(block: bytes) -> bytes:
+    return block[::-1]
+
+
+def pad_message(message: bytes, block_size: int) -> bytes:
+    padding_needed = (block_size - len(message) % block_size) % block_size
+    return message + bytes([padding_needed]) * padding_needed
 
 
 def hash_message_gost(message: bytes, key: bytes, block_size: int = 8) -> bytes:
-    message = pad(message)
-    blocks = [message[i:i + block_size] for i in range(0, len(message), block_size)]
-    h_prev = bytes([0] * block_size)
-    for block in blocks:
-        encrypted = gost_encrypt_block(h_prev, key)
-        intermediate = int.from_bytes(encrypted, 'little') ^ int.from_bytes(block, 'little')
-        h_prev = intermediate.to_bytes(block_size, 'little')
-    return h_prev
+    # Проверка длины ключа
+    if len(key) != 32:
+        raise ValueError("Ключ должен иметь длину 32 байта.")
 
+    key = key[:8]
+    h_prev = bytes(block_size)
+    result_hash = b''
 
-def gost_encrypt_block(block: bytes, key: bytes) -> bytes:
-    left = int.from_bytes(block[:4], byteorder='little')
-    right = int.from_bytes(block[4:], byteorder='little')
-    key_parts = [int.from_bytes(key[i:i + 4], byteorder='little') for i in range(0, 32, 4)]
-    for i in range(24):
-        right, left = gost_round(left, right, key_parts[i % 8])
-    for i in range(8):
-        right, left = gost_round(left, right, key_parts[7 - i])
-    return left.to_bytes(4, byteorder='little') + right.to_bytes(4, byteorder='little')
+    message = pad_message(message, block_size)
+    number_of_blocks = len(message) // block_size
 
+    for i in range(number_of_blocks):
+        m_i = message[i * block_size: (i + 1) * block_size]
 
-def gost_round(left: int, right: int, key: int) -> (int, int):
-    temp = (left + key) % (2 ** 32)
-    shift = 11
+        # H(i) = E(M(i) ⊕ H(i-1))(M(i)) ⊕ M(i)
+        temp = xor_bytes(m_i, h_prev)
+        h_i = des_encrypt(temp)
+        h_i = xor_bytes(h_i, m_i)
 
-    temp = ((temp << shift) & 0xFFFFFFFF) | (temp >> (32 - shift))
-    new_right = right ^ temp
+        h_prev = h_i
+        result_hash += h_i
 
-    return new_right, left
+    return result_hash[:block_size]
