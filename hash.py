@@ -47,23 +47,6 @@ def des_encrypt(block: bytes, key: bytes) -> bytes:
     return final_permutation(pre_output)
 
 
-def des_decrypt(block: bytes, key: bytes) -> bytes:
-    if len(key) != 8:
-        raise ValueError("Key must be 8 bytes for DES.")
-
-    block = initial_permutation(block)
-    left = block[:32]
-    right = block[32:]
-
-    for round_num in range(16):
-        subkey = key
-        temp = xor_bytes(right, subkey)
-        left, right = right, left
-
-    pre_output = right + left
-    return final_permutation(pre_output)
-
-
 def pad_message(message: bytes, block_size: int) -> bytes:
     padding_needed = (block_size - len(message) % block_size) % block_size
     return message + bytes([padding_needed]) * padding_needed
